@@ -48,6 +48,18 @@ const FREE_MODEL_IDS_FILE = path.join(CACHE_DIR, "free-model-ids.json");
 
 type Backend = "anthropic" | "openai-responses" | "openai-completions" | "google";
 
+interface ModelCompat {
+	supportsStore?: boolean;
+	supportsDeveloperRole?: boolean;
+	maxTokensField?: string;
+	supportsReasoningEffort?: boolean;
+	supportsTemperature?: boolean;
+	forceAdaptiveThinking?: boolean;
+	requiresReasoningContentOnAssistantMessages?: boolean;
+	thinkingFormat?: string;
+	supportsLongCacheRetention?: boolean;
+}
+
 interface ModelConfig {
 	id: string;
 	name: string;
@@ -57,6 +69,7 @@ interface ModelConfig {
 	cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 	contextWindow: number;
 	maxTokens: number;
+	compat?: ModelCompat;
 }
 
 interface ModelsDevAPI {
@@ -163,6 +176,31 @@ function saveZenModelsToCache(modelIds: string[]) {
 	}
 }
 
+
+function getCompatForModel(modelId: string, backend: Backend): ModelCompat | undefined {
+	if (backend === "openai-completions") {
+		const compat: ModelCompat = {
+			supportsStore: false,
+			supportsDeveloperRole: false,
+			maxTokensField: "max_tokens",
+		};
+
+		if (modelId.startsWith("deepseek-")) {
+			compat.requiresReasoningContentOnAssistantMessages = true;
+		}
+		if (modelId.startsWith("kimi-k2.6")) {
+			compat.thinkingFormat = "deepseek";
+			compat.supportsReasoningEffort = false;
+		}
+		if (modelId === "grok-build-0.1") {
+			compat.supportsReasoningEffort = false;
+		}
+		return compat;
+	}
+
+	return undefined;
+}
+
 function getBackendFromNpmPackage(npmPackage: string | undefined, defaultBackend: string | undefined): Backend {
 	if (!npmPackage) {
 		// Use default from provider level or fall back to openai-completions
@@ -245,6 +283,8 @@ function buildModels(
 				input.push("image");
 			}
 
+			const compat = getCompatForModel(modelId, backend);
+
 			models.push({
 				id: devModel.id || modelId,
 				name: devModel.name || modelId,
@@ -259,6 +299,7 @@ function buildModels(
 				},
 				contextWindow: devModel.limit?.context ?? 128000,
 				maxTokens: devModel.limit?.output ?? 16384,
+				compat,
 			});
 		} else {
 			// Model exists in Zen but not in models.dev - use sensible defaults
@@ -276,6 +317,7 @@ function buildModels(
 				},
 				contextWindow: 128000,
 				maxTokens: 16384,
+				compat: getCompatForModel(modelId, "openai-completions"),
 			});
 		}
 	}
@@ -382,7 +424,17 @@ export function streamOpenCodeZen(
 				throw new Error(`No OpenCode API key. Set OPENCODE_API_KEY env var. (This model requires an API key.)`);
 			}
 
-			const modelWithBaseUrl = { ...model, baseUrl: ZEN_BASE_URL };
+			const compat = cfg.compat ?? getCompatForModel(model.id, cfg.backend);
+			const modelWithBaseUrl = {
+				...model,
+				baseUrl: ZEN_BASE_URL,
+				reasoning: cfg.reasoning,
+				input: cfg.input,
+				cost: cfg.cost,
+				contextWindow: cfg.contextWindow,
+				maxTokens: cfg.maxTokens,
+				compat,
+			};
 			const streamOptions = { ...options, ...(apiKey ? { apiKey } : {}) };
 
 			// Route to correct backend
@@ -484,7 +536,10 @@ function showFreeModelChangeNotification(
 function registerModels(pi: ExtensionAPI, models: ModelConfig[]) {
 	MODEL_MAP.clear();
 	for (const model of models) {
-		MODEL_MAP.set(model.id, model);
+		MODEL_MAP.set(model.id, {
+			...model,
+			compat: model.compat ?? getCompatForModel(model.id, model.backend),
+		});
 	}
 
 	pi.registerProvider("opencode", {
@@ -499,6 +554,7 @@ function registerModels(pi: ExtensionAPI, models: ModelConfig[]) {
 			cost: m.cost,
 			contextWindow: m.contextWindow,
 			maxTokens: m.maxTokens,
+			compat: m.compat ?? getCompatForModel(m.id, m.backend),
 		})),
 		streamSimple: streamOpenCodeZen,
 	});
