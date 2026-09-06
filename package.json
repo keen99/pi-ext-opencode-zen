@@ -21,6 +21,9 @@
   "peerDependenciesMeta": {
     "@juanibiapina/pi-extension-settings": {
       "optional": true
+    },
+    "@mariozechner/pi-coding-agent": {
+      "optional": true
     }
   },
   "keywords": [
