@@ -446,7 +446,11 @@ export function streamOpenCodeZen(
 					"x-session-id": ZEN_SESSION_ID,
 				},
 			};
-			const streamOptions = { ...options, ...(apiKey ? { apiKey } : {}) };
+			// Zen quirk (observed, contrary to docs): free models FAIL when an
+			// API key is attached — they only work anonymously (with the session
+			// id header). Paid models require the key. Route accordingly.
+			const useApiKey = apiKey && !isFreeModel ? apiKey : undefined;
+			const streamOptions = { ...options, ...(useApiKey ? { apiKey: useApiKey } : {}) };
 
 			// Route to correct backend
 			const streamFn = getStreamFunction(cfg.backend);
