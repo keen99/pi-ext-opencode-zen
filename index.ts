@@ -27,6 +27,13 @@ import type { ExtensionAPI, ModelSelectEvent } from "@mariozechner/pi-coding-age
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
+
+// Zen's free-tier models reject requests without a session id header
+// ("MissingSessionID: OpenCode's free tier can only be used in OpenCode").
+// The OpenCode client sends a session id on every request; sending one
+// stabilizes free-tier access. Paid requests are unaffected.
+const ZEN_SESSION_ID = randomUUID();
 
 // =============================================================================
 // Constants
@@ -434,6 +441,10 @@ export function streamOpenCodeZen(
 				contextWindow: cfg.contextWindow,
 				maxTokens: cfg.maxTokens,
 				compat,
+				headers: {
+					...(model.headers ?? {}),
+					"x-session-id": ZEN_SESSION_ID,
+				},
 			};
 			const streamOptions = { ...options, ...(apiKey ? { apiKey } : {}) };
 
