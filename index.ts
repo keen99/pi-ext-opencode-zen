@@ -23,7 +23,7 @@ import {
 	streamSimpleOpenAICompletions,
 	streamSimpleOpenAIResponses,
 } from "@mariozechner/pi-ai";
-import type { ExtensionAPI, ModelSelectEvent } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -127,7 +127,7 @@ interface ZenModelsResponse {
 // Extension Settings
 // =============================================================================
 
-function getExtensionSetting(extensionName: string, settingId: string, defaultValue: string): string {
+export function getExtensionSetting(extensionName: string, settingId: string, defaultValue: string): string {
 	try {
 		const settingsPath = path.join(os.homedir(), ".pi", "agent", "settings-extensions.json");
 		if (!fs.existsSync(settingsPath)) return defaultValue;
@@ -162,7 +162,7 @@ async function fetchZenModels(): Promise<string[]> {
 	return data.data.map((m) => m.id);
 }
 
-function loadZenModelsFromCache(): string[] | null {
+export function loadZenModelsFromCache(): string[] | null {
 	try {
 		if (!fs.existsSync(ZEN_MODELS_CACHE_FILE)) return null;
 		const data = fs.readFileSync(ZEN_MODELS_CACHE_FILE, "utf-8");
@@ -174,7 +174,7 @@ function loadZenModelsFromCache(): string[] | null {
 	}
 }
 
-function saveZenModelsToCache(modelIds: string[]) {
+export function saveZenModelsToCache(modelIds: string[]) {
 	try {
 		ensureCacheDir();
 		fs.writeFileSync(ZEN_MODELS_CACHE_FILE, JSON.stringify(modelIds, null, 2), "utf-8");
@@ -184,7 +184,7 @@ function saveZenModelsToCache(modelIds: string[]) {
 }
 
 
-function getCompatForModel(modelId: string, backend: Backend): ModelCompat | undefined {
+export function getCompatForModel(modelId: string, backend: Backend): ModelCompat | undefined {
 	if (backend === "openai-completions") {
 		const compat: ModelCompat = {
 			supportsStore: false,
@@ -208,7 +208,7 @@ function getCompatForModel(modelId: string, backend: Backend): ModelCompat | und
 	return undefined;
 }
 
-function getBackendFromNpmPackage(npmPackage: string | undefined, defaultBackend: string | undefined): Backend {
+export function getBackendFromNpmPackage(npmPackage: string | undefined, defaultBackend: string | undefined): Backend {
 	if (!npmPackage) {
 		// Use default from provider level or fall back to openai-completions
 		if (defaultBackend === "@ai-sdk/anthropic") return "anthropic";
@@ -223,7 +223,7 @@ function getBackendFromNpmPackage(npmPackage: string | undefined, defaultBackend
 	return "openai-completions"; // Default for @ai-sdk/openai-compatible or unknown
 }
 
-function loadModelsFromCache(): ModelConfig[] | null {
+export function loadModelsFromCache(): ModelConfig[] | null {
 	try {
 		if (!fs.existsSync(MODELS_CACHE_FILE)) return null;
 		const data = fs.readFileSync(MODELS_CACHE_FILE, "utf-8");
@@ -239,7 +239,7 @@ function loadModelsFromCache(): ModelConfig[] | null {
 	}
 }
 
-function saveModelsToCache(models: ModelConfig[]) {
+export function saveModelsToCache(models: ModelConfig[]) {
 	try {
 		ensureCacheDir();
 		fs.writeFileSync(MODELS_CACHE_FILE, JSON.stringify(models, null, 2), "utf-8");
@@ -248,7 +248,7 @@ function saveModelsToCache(models: ModelConfig[]) {
 	}
 }
 
-function loadFreeModelIds(): string[] {
+export function loadFreeModelIds(): string[] {
 	try {
 		if (!fs.existsSync(FREE_MODEL_IDS_FILE)) return [];
 		const data = fs.readFileSync(FREE_MODEL_IDS_FILE, "utf-8");
@@ -258,7 +258,7 @@ function loadFreeModelIds(): string[] {
 	}
 }
 
-function saveFreeModelIds(ids: string[]) {
+export function saveFreeModelIds(ids: string[]) {
 	try {
 		ensureCacheDir();
 		fs.writeFileSync(FREE_MODEL_IDS_FILE, JSON.stringify(ids, null, 2), "utf-8");
@@ -268,7 +268,7 @@ function saveFreeModelIds(ids: string[]) {
 }
 
 /** Build enriched ModelConfig[] from Zen model IDs + optional models.dev data. */
-function buildModels(
+export function buildModels(
 	zenModelIds: string[],
 	modelsDevData: ModelsDevAPI["opencode"] | undefined,
 	hasApiKey: boolean,
@@ -555,6 +555,17 @@ function registerModels(pi: ExtensionAPI, models: ModelConfig[]) {
 			...model,
 			compat: model.compat ?? getCompatForModel(model.id, model.backend),
 		});
+	}
+
+	if (process.env.ZEN_DEBUG === "1") {
+		try {
+			const agentDir = process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".pi", "agent");
+			fs.mkdirSync(agentDir, { recursive: true });
+			fs.writeFileSync(
+				path.join(agentDir, "zen-loaded.json"),
+				JSON.stringify({ loaded: true, models: models.length, free: models.filter((m) => m.cost.input === 0 && m.cost.output === 0).length }) + "\n",
+			);
+		} catch { /* debug marker best-effort */ }
 	}
 
 	pi.registerProvider("opencode", {

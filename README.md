@@ -1,5 +1,8 @@
 # pi-ext-opencode-zen
 
+![release-watch](https://github.com/keen99/pi-ext-opencode-zen/actions/workflows/release-watch.yml/badge.svg)
+[![pi tested](https://img.shields.io/github/v/release/keen99/pi-ext-opencode-zen?label=pi%20tested%200.75.0%20%E2%86%92)](https://github.com/keen99/pi-ext-opencode-zen/releases)
+
 Pi ships with a hardcoded OpenCode provider, but its model list only updates when pi itself is updated. This extension replaces it with a dynamic version that fetches available models directly from Zen's `/v1/models` API at startup, so new models are available immediately without waiting for a pi release.
 
 The extension enriches the live model list with metadata from models.dev (capabilities, routing, pricing).
@@ -245,6 +248,31 @@ Check:
 1. Notifications are enabled in `/extension-settings`
 2. The free model list actually changed (check `free-model-ids.json`)
 3. You're in an interactive session (notifications only show with UI)
+
+## Development
+
+```sh
+npm run check       # typecheck + 10 unit tests (parsing, caching, free/paid routing, error plumbing)
+npm run test:matrix # deep smoke on every published pi release >= 0.75.0
+```
+
+Unit tests cover backend mapping (npm package / provider default /
+unknown), per-model compat quirks (deepseek reasoning content, kimi
+thinking format, grok effort suppression), models.dev enrichment
+(modalities, attachment, costs, limits) with defaults for unknown ids,
+the free-only filter when no API key is set, cache roundtrips with
+validation, extension settings fallback, and the extension closure
+with stubbed fetch: cold start success/failure, warm cache with paid
+models, gone-model warnings on model_select, and stream error plumbing
+(unknown model, paid model without key). The matrix boots each pinned
+pi release in RPC mode with a seeded cache and stubbed fetch,
+asserting the opencode provider registers on the real process.
+Cached pi installs live in `.matrix-cache/` and are reused across
+runs.
+
+`ZEN_DEBUG=1` writes a registration marker (model + free counts);
+`PI_TEST_BIN` overrides the pi binary in the smoke. Tests are
+hermetic — cache lives in a temp `XDG_CACHE_HOME`, network stubbed.
 
 ## License
 
